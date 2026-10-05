@@ -1,0 +1,23 @@
+language js
+
+// テストファイルだけに効かせる（biome.json の overrides）。規律ではなく構造で禁止する。
+or {
+  `vi.$method($...)` as $call where {
+    $method <: or {
+      `mock`,
+      `doMock`,
+      `spyOn`,
+      `fn`
+    },
+    register_diagnostic(span=$call, message="モジュールの差し替えとモックライブラリは使わない。ポートに手書きのフェイクを注入する。", severity="error")
+  },
+  `$_.$snapshot($...)` as $call where {
+    $snapshot <: or {
+      `toMatchSnapshot`,
+      `toMatchInlineSnapshot`,
+      `toThrowErrorMatchingSnapshot`,
+      `toThrowErrorMatchingInlineSnapshot`
+    },
+    register_diagnostic(span=$call, message="スナップショットは使わない。保証したい値を明示して検証する。", severity="error")
+  }
+}

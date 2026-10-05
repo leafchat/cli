@@ -1,0 +1,4 @@
+# Why LF にそろえるか: dist/ はビルドの結果をコミットし、check-dist が作り直しとバイトで比べる。改行の変換で差を出さない。
+* text=auto eol=lf
+# ビルドの結果。PR の差分では畳み、言語の統計に数えない。
+dist/** -diff linguist-generated=true

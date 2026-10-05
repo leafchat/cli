@@ -1,0 +1,6 @@
+# 単一のパッケージ。packages を書かないとルートだけがワークスペースになる。
+# Why 1 日待つか: 公開の直後に乗っ取られた版を入れない（公開から 1 日経っていない版は入れない）。
+minimumReleaseAge: 1440
+# Why esbuild の install scripts を走らせないか: 本体は optionalDependencies の各 OS の包みから実行ファイルを読み、scripts が無くても動く（2026-10-05 に確かめた）。走らせる包みを増やさない。
+ignoredBuiltDependencies:
+  - esbuild

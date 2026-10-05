@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # Why 7 日待つか: 公開の直後に乗っ取られた版へ上げない（zizmor の推奨）。
+    cooldown:
+      default-days: 7
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      development:
+        dependency-type: development

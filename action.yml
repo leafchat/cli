@@ -1,0 +1,54 @@
+name: leafchat knowledge sync
+description: leafchat のナレッジを、リポジトリのフォルダから同期します（PR に計画をコメント）
+author: leafchat
+branding:
+  icon: book-open
+  color: green
+inputs:
+  mode:
+    description: "check（送る前の検査だけ）| plan（サーバーの計画）| apply（アップロードと実行）"
+    required: false
+    default: plan
+  path:
+    description: 同期するフォルダ。リポジトリのルートからの相対パス
+    required: true
+  source-id:
+    description: leafchat の同期のソースの ID（plan と apply で必須）
+    required: false
+    default: ""
+  api-key:
+    description: leafchat の API キー。plan は用途「同期の確認」、apply は「同期」の鍵を secrets から渡す
+    required: false
+    default: ""
+  api-url:
+    description: leafchat の API の URL
+    required: false
+    default: https://api.leafchat.app
+  comment:
+    description: pull request に計画をコメントするか（true / false）
+    required: false
+    default: "true"
+  github-token:
+    description: PR にコメントするためのトークン
+    required: false
+    default: ${{ github.token }}
+  confirm-deletes:
+    description: 削除を確認済みにするパス（1 行に 1 つ）
+    required: false
+    default: ""
+  confirm-deleted-files:
+    description: push の前後で git から消えたファイルの削除を確認済みにするか（true / false。fetch-depth 0 が要る）
+    required: false
+    default: "true"
+  wait:
+    description: apply のあと、取込が終わるまで待つか（true / false）
+    required: false
+    default: "true"
+outputs:
+  has-changes:
+    description: 計画に変更があれば true
+  plan-file:
+    description: 計画の JSON（CLI の --json と同じ形）を書いたファイルのパス
+runs:
+  using: node24
+  main: dist/action.js

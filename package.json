@@ -1,0 +1,65 @@
+{
+  "name": "@leafchat/cli",
+  "version": "1.0.0",
+  "description": "Sync a folder of documents to leafchat knowledge (CLI and GitHub Action).",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "leafchat": "lib/leafchat.js"
+  },
+  "files": [
+    "lib",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leafchat/cli.git"
+  },
+  "homepage": "https://github.com/leafchat/cli#readme",
+  "bugs": {
+    "url": "https://github.com/leafchat/cli/issues"
+  },
+  "keywords": [
+    "leafchat",
+    "knowledge",
+    "sync",
+    "cli",
+    "github-action"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "packageManager": "pnpm@10.23.0",
+  "scripts": {
+    "check": "biome check --write .",
+    "check-types": "tsc --noEmit",
+    "knip": "knip",
+    "depcruise": "depcruise src scripts --config .dependency-cruiser.cjs",
+    "test": "vitest run",
+    "build": "node scripts/build.ts",
+    "publint": "publint",
+    "gen:api": "pnpm dlx openapi-typescript@7.13.0 https://api.leafchat.app/api/v1/openapi.json -o src/infrastructure/generated/leafchat-api.d.ts",
+    "check:api": "pnpm dlx openapi-typescript@7.13.0 https://api.leafchat.app/api/v1/openapi.json -o src/infrastructure/generated/leafchat-api.d.ts --check",
+    "leafchat": "node src/cli/bin.ts"
+  },
+  "devDependencies": {
+    "@actions/core": "3.0.1",
+    "@biomejs/biome": "2.5.14",
+    "@commander-js/extra-typings": "15.0.0",
+    "@types/node": "^24",
+    "commander": "15.0.0",
+    "dependency-cruiser": "^17.3.10",
+    "esbuild": "0.28.2",
+    "knip": "^6.0.5",
+    "publint": "0.3.25",
+    "typescript": "~6.0.3",
+    "vitest": "4.1.11",
+    "zod": "4.6.5"
+  }
+}

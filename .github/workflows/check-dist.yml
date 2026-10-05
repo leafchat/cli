@@ -1,0 +1,62 @@
+name: Check dist
+
+# Action はタグの中身（コミットした dist/action.js）をそのまま動かす。dist/ がソースから作り直したものと同じかを見る。
+# 違えば、作り直した dist/ を artifact に上げて失敗にする。直し方は、手元で pnpm build してコミットする（README の「開発」）。
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: check-dist-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check-dist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      # Why git status で見るか: git diff は、コミットしていない新しいファイル（dist/ に増えたファイル）を拾わない。
+      - name: Compare dist/ with the committed one
+        id: diff
+        run: |
+          if [ -n "$(git status --porcelain --untracked-files=all -- dist/)" ]; then
+            echo "::error::dist/ がソースから作り直したものと違います。pnpm build してコミットしてください。"
+            git status --porcelain --untracked-files=all -- dist/
+            git diff --stat -- dist/
+            exit 1
+          fi
+
+      - name: Upload the rebuilt dist/
+        if: ${{ failure() && steps.diff.outcome == 'failure' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+          retention-days: 5

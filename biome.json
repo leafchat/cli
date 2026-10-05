@@ -1,0 +1,81 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": false,
+    "clientKind": "git",
+    "useIgnoreFile": false
+  },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/*.md",
+      "!src/infrastructure/generated",
+      "!lib",
+      "!dist"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        "noParameterAssign": "error",
+        "useAsConstAssertion": "error",
+        "useDefaultParameterLast": "error",
+        "useEnumInitializers": "error",
+        "useSelfClosingElements": "error",
+        "useSingleVarDeclarator": "error",
+        "noUnusedTemplateLiteral": "error",
+        "useNumberNamespace": "error",
+        "noInferrableTypes": "error",
+        "noUselessElse": "error"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.test.ts"],
+      "plugins": ["./biome-plugins/test-restrictions.grit"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noFocusedTests": "error",
+            "noSkippedTests": "error",
+            "noExportsInTest": "error"
+          },
+          "nursery": {
+            "useExpect": "error",
+            "noConditionalExpect": "error",
+            "noIdenticalTestTitle": "error",
+            "useConsistentTestIt": {
+              "level": "error",
+              "options": {
+                "function": "test",
+                "withinDescribe": "test"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,139 @@
+name: Release
+
+# タグ vX.Y.Z の push で、検査してから npm に公開する（Trusted Publishing・provenance つき）。
+# GitHub の Release と Marketplace への掲載は、人が Release の画面で行う（RELEASING.md）。
+# Why キャッシュを使わないか: 汚されたキャッシュから、公開のジョブの OIDC のトークンを盗まれる経路を断つ。
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          cache: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check that the tag matches package.json
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="$(node -p 'JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).version')"
+          if [ "v$VERSION" != "$TAG" ]; then
+            echo "::error::タグ $TAG と package.json の version $VERSION が違います。"
+            exit 1
+          fi
+
+      - name: Lint (Biome)
+        run: pnpm biome ci .
+
+      - name: Check unused code (Knip)
+        run: pnpm knip
+
+      - name: Type check
+        run: pnpm check-types
+
+      - name: Check import boundaries (dependency-cruiser)
+        run: pnpm depcruise
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Check that dist/ is the committed one
+        run: |
+          if [ -n "$(git status --porcelain --untracked-files=all -- dist/)" ]; then
+            echo "::error::dist/ がソースから作り直したものと違います。"
+            exit 1
+          fi
+
+      - name: Check the package (publint)
+        run: pnpm publint
+
+  publish-npm:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Why environment に縛るか: 公開は承認つきの environment の中だけで動く。npm の Trusted Publishing の設定も、この environment に縛る。
+    environment: release
+    permissions:
+      contents: read
+      id-token: write # npm の Trusted Publishing（OIDC）と provenance
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          cache: false
+
+      # Why Node 24 の npm か: Trusted Publishing は npm 11.5.1 以上が要る（.node-version の 24.11.0 は npm 11.6.1）。
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      # Why 既にある版を飛ばすか: 承認の後にジョブが途中で落ちたとき、再実行で同じ版を出し直そうとして失敗しないようにする。
+      # Why npm view でなく registry に直に聞くか: setup-node は NODE_AUTH_TOKEN に仮の値を入れる。仮の鍵つきの問い合わせの結果に頼らない。
+      - name: Check whether the version is already published
+        id: published
+        run: |
+          VERSION="$(node -p 'JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).version')"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}' "https://registry.npmjs.org/@leafchat%2Fcli/$VERSION")"
+          case "$STATUS" in
+            200) echo "exists=true" >> "$GITHUB_OUTPUT" ;;
+            404) echo "exists=false" >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "::error::npm の registry が $STATUS を返しました。しばらくしてから再実行してください。"
+              exit 1
+              ;;
+          esac
+
+      # Why pnpm pack と npm publish に分けるか: pnpm の publish が OIDC に対応しているかを確かめられなかった。包みは pnpm で作り、公開は npm に任せる。
+      - name: Publish to npm
+        if: ${{ steps.published.outputs.exists == 'false' }}
+        env:
+          VERSION: ${{ steps.published.outputs.version }}
+        run: |
+          pnpm pack
+          npm publish "./leafchat-cli-$VERSION.tgz" --access public

@@ -1,0 +1,50 @@
+name: Action smoke
+
+# このリポジトリの Action（コミットした dist/action.js）を、見本のフォルダに対して mode: check で動かす。鍵は使わない。
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: action-smoke-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  action-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Why ./ か: 自分の checkout した版の action.yml と dist/ を動かす。ルートの action.yml を $/ で指す書き方は、GitHub の文書に例が無く確かめられない。
+      - name: Run the action (check)
+        id: smoke
+        uses: ./ # zizmor: ignore[self-repository]
+        with:
+          mode: check
+          path: test/fixtures/knowledge
+          comment: "false"
+
+      - name: Read the outputs
+        env:
+          HAS_CHANGES: ${{ steps.smoke.outputs.has-changes }}
+          PLAN_FILE: ${{ steps.smoke.outputs.plan-file }}
+        run: |
+          test "$HAS_CHANGES" = "false"
+          node -e '
+            const plan = JSON.parse(require("node:fs").readFileSync(process.env.PLAN_FILE, "utf8"));
+            if (plan.version !== 1 || plan.command !== "check" || plan.ok !== true) {
+              console.error(plan);
+              process.exit(1);
+            }
+          '
