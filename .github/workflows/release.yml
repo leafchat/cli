@@ -1,7 +1,8 @@
 name: Release
 
-# タグ vX.Y.Z の push で、検査してから npm に公開する（Trusted Publishing・provenance つき）。
-# GitHub の Release と Marketplace への掲載は、人が Release の画面で行う（RELEASING.md）。
+# タグ vX.Y.Z の push で、検査してから npm に staged publish する（Trusted Publishing・provenance つき）。
+# 版が公開されるのは、npmjs.com の Staged Packages で人が 2 段階認証で承認した後（RELEASING.md）。
+# GitHub の Release と Marketplace への掲載も、人が Release の画面で行う。
 # Why キャッシュを使わないか: 汚されたキャッシュから、公開のジョブの OIDC のトークンを盗まれる経路を断つ。
 
 on:
@@ -98,11 +99,12 @@ jobs:
         with:
           cache: false
 
-      # Why Node 24 の npm か: Trusted Publishing は npm 11.5.1 以上が要る（.node-version の 24.11.0 は npm 11.6.1）。
+      # Why このジョブだけ 24.21.0 か: staged publishing は npm 11.15.0 以上が要る。.node-version の 24.11.0 は npm 11.6.1、24.21.0 は npm 11.19.0。
+      # 束ねる esbuild の出力は Node の版に左右されない（check-dist と同じ dist/ になる）。
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version-file: .node-version
+          node-version: 24.21.0
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
@@ -113,6 +115,7 @@ jobs:
         run: pnpm build
 
       # Why 既にある版を飛ばすか: 承認の後にジョブが途中で落ちたとき、再実行で同じ版を出し直そうとして失敗しないようにする。
+      # 承認待ち（staged）の版は 404 のままなので、再実行すると stage で「同じ版がある」と失敗する（npmjs.com で承認か却下をする）。
       # Why npm view でなく registry に直に聞くか: setup-node は NODE_AUTH_TOKEN に仮の値を入れる。仮の鍵つきの問い合わせの結果に頼らない。
       - name: Check whether the version is already published
         id: published
@@ -129,11 +132,13 @@ jobs:
               ;;
           esac
 
-      # Why pnpm pack と npm publish に分けるか: pnpm の publish が OIDC に対応しているかを確かめられなかった。包みは pnpm で作り、公開は npm に任せる。
-      - name: Publish to npm
+      # Why pnpm pack と npm に分けるか: pnpm の publish が OIDC に対応しているかを確かめられなかった。包みは pnpm で作り、npm に渡す。
+      # Why stage か: npm の Trusted Publisher は stage publish だけを許している。workflow や GitHub の側が乗っ取られても、npm の 2 段階認証の承認なしには版が出ない。
+      - name: Stage the package on npm
         if: ${{ steps.published.outputs.exists == 'false' }}
         env:
           VERSION: ${{ steps.published.outputs.version }}
         run: |
           pnpm pack
-          npm publish "./leafchat-cli-$VERSION.tgz" --access public
+          npm stage publish "./leafchat-cli-$VERSION.tgz" --access public --provenance
+          echo "::notice::@leafchat/cli@$VERSION を npm に stage しました。npmjs.com の Staged Packages で承認すると公開されます。"

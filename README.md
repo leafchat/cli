@@ -319,7 +319,7 @@ pnpm leafchat sync check ./test/fixtures/knowledge   # ビルドせずに CLI �
 - 配布物は実行時の依存を持たない 1 ファイルです。install scripts もありません
 - GitHub Action で使うときは、版を完全なコミットの SHA で固定してください
 - Action は鍵をログで伏せ（`::add-mask::`）、出力・要約・コメントに入れません。`pull_request_target` では動かず、PR のイベントでは反映しません
-- npm の包みは GitHub Actions から Trusted Publishing で公開し、provenance（どのコミット・workflow から作ったか）を付けます。npmjs.com の包みの画面で確かめられます（最初の 1.0.0 だけは、包みを作るために手元から公開したので provenance がありません）
+- npm の包みは GitHub Actions から Trusted Publishing で stage し、npm の 2 段階認証の承認を経て公開します。provenance（どのコミット・workflow から作ったか）を付け、npmjs.com の包みの画面で確かめられます（最初の 1.0.0 だけは、包みを作るために手元から公開したので provenance がありません）
 
 脆弱性の報告は [SECURITY.md](SECURITY.md) を見てください。
 

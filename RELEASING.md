@@ -1,10 +1,10 @@
 # 公開の手順
 
-CLI（npm の `@leafchat/cli`）と GitHub Action（Marketplace の `leafchat/cli`）を、**同じタグ** `vX.Y.Z` で公開します。npm への公開は `release` の workflow が行い、GitHub の Release と Marketplace への掲載は人が行います。
+CLI（npm の `@leafchat/cli`）と GitHub Action（Marketplace の `leafchat/cli`）を、**同じタグ** `vX.Y.Z` で公開します。npm へは `release` の workflow が版を **stage**（公開待ちに置く）し、npmjs.com で人が 2 段階認証で承認すると公開されます。GitHub の Release と Marketplace への掲載も人が行います。
 
 | 経路 | 守り |
 | --- | --- |
-| npm | Trusted Publishing（OIDC。長期のトークンを置かない）・provenance（1.0.1 から）・承認つきの environment `release`・包みの設定で「トークンを禁じる」 |
+| npm | Trusted Publishing（OIDC。長期のトークンを置かない。許す操作は stage publish だけ）・npmjs.com での 2 段階認証の承認（staged publishing）・provenance（1.0.1 から）・承認つきの environment `release`・包みの設定で「2FA を迂回するトークンを禁じる」 |
 | GitHub | Immutable releases（公開した Release のタグは動かせない）・タグの ruleset・`uses:` の SHA の固定・`dist/` の作り直しとの比較（`check-dist`） |
 
 ## 最初の 1 回だけ
@@ -50,12 +50,12 @@ Trusted Publishing（`npm trust` を含む）も staged publishing も、包み�
 
 ### 3. npm の包みの設定（npmjs.com の `@leafchat/cli` → Settings）
 
-- **Trusted Publisher**：GitHub Actions・Organization or user `leafchat`・Repository `cli`・Workflow filename `release.yml`・Environment name `release`。許す操作に **`npm publish`** を選びます（新しい設定の既定は stage publish だけのため）
-- **Publishing access**：「Require two-factor authentication and disallow tokens」
+- **Trusted Publisher**：GitHub Actions・Organization or user `leafchat`・Repository `cli`・Workflow filename `release.yml`・Environment name `release`。Allowed actions は**どちらもチェックしません**（`npm stage publish` だけを許す。npm が勧める形で、workflow や GitHub の側が乗っ取られても npm の 2 段階認証の承認なしには版が出ない。2026-10-05 に決めた）
+- **Publishing access**：「Require two-factor authentication and disallow bypass 2fa tokens (recommended)」
 
 ### 4. タグ・Release・Marketplace
 
-「毎回」の 2〜6 を、`X.Y.Z` を `1.0.0` にして行います。1.0.0 は npm に既にあるので、`publish-npm` は承認すると公開を飛ばして成功します（4 の provenance の確認は 1.0.1 から）。
+「毎回」の 2〜7 を、`X.Y.Z` を `1.0.0` にして行います。1.0.0 は npm に既にあるので、`publish-npm` は承認すると stage を飛ばして成功します（4 の npm での承認と 5 の provenance の確認は 1.0.1 から）。
 
 ## 毎回（`vX.Y.Z`。1.0.1 から）
 
@@ -68,10 +68,11 @@ Trusted Publishing（`npm trust` を含む）も staged publishing も、包み�
    git push origin vX.Y.Z
    ```
 
-3. **承認**：`Release` の workflow の `publish-npm` が承認を待ちます。`verify` が通っていることを見て承認します
-4. **npm を確かめる**：npmjs.com の `@leafchat/cli` に `X.Y.Z` が出て、provenance（「Built and signed on GitHub Actions」）が付いていることを確かめます
-5. **Release と Marketplace**：GitHub の Releases → Draft a new release → タグ `vX.Y.Z` → 「Publish this Action to the GitHub Marketplace」にチェック → 分類（Continuous integration・Utilities）→ 本文に CHANGELOG の該当の節を貼る → Publish release（Immutable なので、後からタグは動きません）
-6. **動くタグを付け替える**（`v1` には Release を作りません）
+3. **GitHub で承認**：`Release` の workflow の `publish-npm` が承認を待ちます。`verify` が通っていることを見て承認します。`publish-npm` は版を npm に stage して終わります
+4. **npm で承認**：npmjs.com の `@leafchat/cli` → **Staged Packages** のタブで `X.Y.Z` を確かめ（npm のマルウェアの検査が済むまで承認できません）、**Approve** を押して 2 段階認証をします。手元からなら `npm stage list @leafchat/cli` → `npm stage approve <stage-id>`（npm 11.15.0 以上）
+5. **npm を確かめる**：`@leafchat/cli` に `X.Y.Z` が出て、provenance（「Built and signed on GitHub Actions」）が付いていることを確かめます
+6. **Release と Marketplace**：GitHub の Releases → Draft a new release → タグ `vX.Y.Z` → 「Publish this Action to the GitHub Marketplace」にチェック → 分類（Continuous integration・Utilities）→ 本文に CHANGELOG の該当の節を貼る → Publish release（Immutable なので、後からタグは動きません）
+7. **動くタグを付け替える**（`v1` には Release を作りません）
 
    ```bash
    git tag -f v1 "vX.Y.Z^{}"
@@ -84,6 +85,7 @@ Trusted Publishing（`npm trust` を含む）も staged publishing も、包み�
 | --- | --- |
 | `verify` の「Check that the tag matches package.json」で落ちる | タグと `package.json` の `version` がそろっているか（タグを消して付け直すより、版を上げて出し直す） |
 | `verify` の「Check that dist/ is the committed one」で落ちる | release の PR で `pnpm build` した `dist/` をコミットしたか |
-| `publish-npm` が 404・403 で落ちる | Trusted Publisher の設定（リポジトリ・`release.yml`・environment `release`・`npm publish` を許す）が合っているか |
-| `publish-npm` を再実行したい | そのまま再実行できます（npm に同じ版があれば公開を飛ばします） |
+| `publish-npm` が 404・403 で落ちる | Trusted Publisher の設定（リポジトリ・`release.yml`・environment `release`）が合っているか。workflow が `npm publish` でなく `npm stage publish` を呼んでいるか（stage だけを許しているため） |
+| `publish-npm` を再実行したい | 公開済みの版なら、そのまま再実行できます（stage を飛ばします）。承認待ちの版があると、同じ版は stage できずに失敗します。npmjs.com の Staged Packages で承認するか、却下（`npm stage reject <stage-id>`）してから再実行します |
+| stage した版に誤りがあった | npmjs.com の Staged Packages で却下します（公開されていないので、利用者には届きません） |
 | 公開した版に誤りがあった | npm の版は消さずに `npm deprecate` し、直した版（`X.Y.Z+1`）を出します。Immutable なので、同じタグの付け直しはできません |
