@@ -2,7 +2,7 @@
 
 この CLI と GitHub Action の変更点です。書き方は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/)、版の付け方は [Semantic Versioning](https://semver.org/lang/ja/) に従います。
 
-## [Unreleased]
+## [1.0.0] - 2026-10-05
 
 ### Added
 
