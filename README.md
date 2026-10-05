@@ -278,7 +278,7 @@ updates:
 }
 ```
 
-失敗したときは `ok` が `false`、`error` が `{ "code": "…", "message": "…" }` になります。GitHub Action の出力 `plan-file` も同じ形です（`check` では `command` が `"check"`、`plan` が `null`）。
+失敗したときは `ok` が `false`、`error` が `{ "code": "…", "message": "…" }` になります。`executed` は受け取った実行の応答の操作で、応答を取りこぼして呼び直したときは一部だけになります（件数は `summary` を見てください）。GitHub Action の出力 `plan-file` も同じ形です（`check` では `command` が `"check"`、`plan` が `null`）。
 
 ## Git LFS
 

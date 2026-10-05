@@ -2,6 +2,12 @@
 
 この CLI と GitHub Action の変更点です。書き方は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/)、版の付け方は [Semantic Versioning](https://semver.org/lang/ja/) に従います。
 
+## [1.0.1] - 2026-10-05
+
+### Fixed
+
+- `leafchat sync apply` と GitHub Action（`mode: apply`）：実行の応答を取りこぼして呼び直したとき（leafchat の 1 回の実行が待ち時間を超えたときなど）に、「反映しました」の件数が少なく出て、前の呼び出しで作った文書の取り込みを待たなかった。件数と取り込みの待ち合わせを、計画（dry-run）の作成・更新・名前の変更から組むようにした
+
 ## [1.0.0] - 2026-10-05
 
 ### Added

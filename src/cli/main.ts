@@ -265,12 +265,12 @@ async function runApply(
   );
   if (rewriting) io.stderr("\n");
   if (!result.ok) return failSync(io, json, result.error, waitTimeoutMinutes);
-  const { view, executed, outcome } = result.value;
+  const { view, executed, counts, outcome } = result.value;
   if (outcome === "unchanged" && json === null) {
     io.stdout(renderPlanText(view, paint));
   }
   if (outcome === "applied") {
-    io.stderr(`${appliedText(executed)}\n`);
+    io.stderr(`${appliedText(counts)}\n`);
   }
   if (json !== null) {
     writeJson(io, json, {

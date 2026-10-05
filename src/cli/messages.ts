@@ -1,6 +1,6 @@
 import { findingText } from "../domain/report.ts";
-import type { ApiProblem, SyncExecuted } from "../domain/sync-contract.ts";
-import type { ProgressEvent } from "../use-cases/apply-sync.ts";
+import type { ApiProblem } from "../domain/sync-contract.ts";
+import type { AppliedCounts, ProgressEvent } from "../use-cases/apply-sync.ts";
 import type { Stage, SyncFailure } from "../use-cases/sync-steps.ts";
 
 // CLI の文言（日本語）。誤りは「何が・なぜ・どうすればよいか」を書く。
@@ -118,8 +118,6 @@ export function progressText(event: ProgressEvent): string {
 }
 
 /** 反映の後の 1 行（CLI の stderr と Action の要約）。 */
-export function appliedText(executed: readonly SyncExecuted[]): string {
-  const count = (kind: SyncExecuted["kind"]) =>
-    executed.filter((e) => e.kind === kind).length;
-  return `反映しました（作成 ${count("create")}・更新 ${count("update")}・名前の変更 ${count("rename")}・移動 ${count("move")}・削除 ${count("delete")}）。`;
+export function appliedText(counts: AppliedCounts): string {
+  return `反映しました（作成 ${counts.create}・更新 ${counts.update}・名前の変更 ${counts.rename}・移動 ${counts.move}・削除 ${counts.delete}）。`;
 }

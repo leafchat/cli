@@ -9,6 +9,7 @@ import { err, ok, type Result } from "../domain/result.ts";
 import type {
   SyncClientInfo,
   SyncExecuted,
+  SyncPlan,
   SyncResponse,
   UploadNeed,
 } from "../domain/sync-contract.ts";
@@ -33,13 +34,72 @@ export type ProgressEvent =
   | Readonly<{ kind: "execute"; executed: number; remaining: number }>
   | Readonly<{ kind: "wait"; live: number; pending: number }>;
 
+/** 反映した操作の数（計画から数える）。 */
+export type AppliedCounts = Readonly<Record<SyncExecuted["kind"], number>>;
+
 export type ApplyOutcome = Readonly<{
   outcome: "unchanged" | "applied";
   view: PlanView;
+  /** 受け取った実行の応答の操作。応答を取りこぼした呼び出しの分は含まない（件数は counts を見る）。 */
   executed: readonly SyncExecuted[];
+  counts: AppliedCounts;
   /** 待たなかったときは null。 */
   readiness: Readiness | null;
 }>;
+
+const countsOf = (plan: SyncPlan): AppliedCounts => ({
+  create: plan.create.length,
+  update: plan.update.length,
+  rename: plan.rename.length,
+  move: plan.move.length,
+  delete: plan.delete.length,
+});
+
+/**
+ * 公開を待つ文書。計画の作成・更新・名前の変更から組み、実行の応答で分かった文書と版で詰める。
+ * Why 計画から組むか: 実行の応答を取りこぼして呼び直すと、前の呼び出しで済んだ操作は応答に載らない（呼び直しの計画では「変更なし」になる）。
+ */
+function expectedOf(
+  plan: SyncPlan,
+  executed: readonly SyncExecuted[],
+): Expected[] {
+  const known = new Map(
+    executed.flatMap((item): [string, Expected][] =>
+      (item.kind === "create" ||
+        item.kind === "update" ||
+        item.kind === "rename") &&
+      item.revision_id !== null
+        ? [
+            [
+              item.external_id,
+              {
+                externalId: item.external_id,
+                documentId: item.document_id,
+                revisionId: item.revision_id,
+              },
+            ],
+          ]
+        : [],
+    ),
+  );
+  const planned: Expected[] = [
+    ...plan.create.map((op) => ({
+      externalId: op.external_id,
+      documentId: null,
+      revisionId: null,
+    })),
+    ...[...plan.update, ...plan.rename].map((op) => ({
+      externalId: op.external_id,
+      documentId: op.document_id,
+      revisionId: null,
+    })),
+  ];
+  const plannedIds = new Set(planned.map((item) => item.externalId));
+  return [
+    ...planned.map((item) => known.get(item.externalId) ?? item),
+    ...[...known.values()].filter((item) => !plannedIds.has(item.externalId)),
+  ];
+}
 
 type Deps = {
   tree: TreeReader;
@@ -204,8 +264,15 @@ export async function applySync(
   if (!planned.ok) return planned;
   const { response, confirmed } = planned.value;
   const view = viewOf(params.sourceId, prepared.value, response, []);
+  const counts = countsOf(response.plan);
   if (!hasChanges(response.plan)) {
-    return ok({ outcome: "unchanged", view, executed: [], readiness: null });
+    return ok({
+      outcome: "unchanged",
+      view,
+      executed: [],
+      counts,
+      readiness: null,
+    });
   }
   if (!(await deps.confirm(view))) return err({ kind: "declined" });
 
@@ -262,26 +329,19 @@ export async function applySync(
   }
 
   if (!params.wait) {
-    return ok({ outcome: "applied", view, executed, readiness: null });
+    return ok({ outcome: "applied", view, executed, counts, readiness: null });
   }
-  const expected = executed.flatMap((item): Expected[] =>
-    (item.kind === "create" ||
-      item.kind === "update" ||
-      item.kind === "rename") &&
-    item.revision_id !== null
-      ? [
-          {
-            externalId: item.external_id,
-            documentId: item.document_id,
-            revisionId: item.revision_id,
-          },
-        ]
-      : [],
-  );
+  const expected = expectedOf(response.plan, executed);
   const readiness =
     expected.length === 0
       ? ok({ live: [], pending: [], failed: [] })
       : await waitUntilLive(deps, expected, params.waitTimeoutMs);
   if (!readiness.ok) return readiness;
-  return ok({ outcome: "applied", view, executed, readiness: readiness.value });
+  return ok({
+    outcome: "applied",
+    view,
+    executed,
+    counts,
+    readiness: readiness.value,
+  });
 }

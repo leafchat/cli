@@ -169,6 +169,78 @@ describe("反映（apply）", () => {
     });
   });
 
+  test("実行の応答を取りこぼして呼び直しても、計画の作成をすべて待ち、反映の件数は計画から数える", async () => {
+    const PRICES = { path: "共通/料金表.md", content: "# 料金表\n" };
+    const world = setup(fakeTree([MD, PRICES]), {
+      sync: [
+        ok(
+          syncResponse({
+            plan: syncPlan({
+              create: [
+                {
+                  external_id: "共通/営業時間.md",
+                  filename: "営業時間.md",
+                  parts: 1,
+                  folder_id: "folder-1",
+                  folder_name: "共通",
+                },
+                {
+                  external_id: "共通/料金表.md",
+                  filename: "料金表.md",
+                  parts: 1,
+                  folder_id: "folder-1",
+                  folder_name: "共通",
+                },
+              ],
+            }),
+          }),
+        ),
+        // 営業時間.md は、取りこぼした前の応答の呼び出しで作られている。
+        executedRound({
+          executed: [
+            {
+              kind: "create",
+              external_id: "共通/料金表.md",
+              document_id: "doc-2",
+              revision_id: "rev-2",
+            },
+          ],
+          remaining: 0,
+        }),
+      ],
+      documents: [
+        ok([
+          apiDocument(),
+          apiDocument({
+            id: "doc-2",
+            external_id: "共通/料金表.md",
+            current_revision: {
+              id: "rev-2",
+              state: "live",
+              error_message: null,
+            },
+            head_revision: { id: "rev-2", state: "live", error_message: null },
+          }),
+        ]),
+      ],
+    });
+
+    const result = await world.run({ wait: true });
+
+    const outcome = expectOk(result);
+    expect({
+      readiness: outcome.readiness,
+      counts: outcome.counts,
+    }).toEqual({
+      readiness: {
+        live: ["共通/営業時間.md", "共通/料金表.md"],
+        pending: [],
+        failed: [],
+      },
+      counts: { create: 2, update: 0, rename: 0, move: 0, delete: 0 },
+    });
+  });
+
   const DELETE_LIMIT = err(
     apiProblem({
       code: "delete_limit_exceeded",
