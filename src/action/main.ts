@@ -304,10 +304,10 @@ async function runApply(
     },
   );
   if (!result.ok) return fail(session, "apply", run.sourceId, result.error);
-  const { view, executed, outcome } = result.value;
+  const { view, executed, counts, outcome } = result.value;
   annotate(session, view.findings);
   const done =
-    outcome === "applied" ? appliedText(executed) : ACTION_MESSAGES.unchanged;
+    outcome === "applied" ? appliedText(counts) : ACTION_MESSAGES.unchanged;
   await writeSummary(
     session,
     (options) => `${renderPlanMarkdown(view, options)}\n${done}\n`,

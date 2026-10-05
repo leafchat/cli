@@ -21125,13 +21125,12 @@ function progressText(event) {
       return `\u53CD\u6620\u3092\u5F85\u3063\u3066\u3044\u307E\u3059\uFF08\u516C\u958B ${event.live} \u4EF6\u30FB\u51E6\u7406\u4E2D ${event.pending} \u4EF6\uFF09`;
   }
 }
-function appliedText(executed) {
-  const count = (kind) => executed.filter((e) => e.kind === kind).length;
-  return `\u53CD\u6620\u3057\u307E\u3057\u305F\uFF08\u4F5C\u6210 ${count("create")}\u30FB\u66F4\u65B0 ${count("update")}\u30FB\u540D\u524D\u306E\u5909\u66F4 ${count("rename")}\u30FB\u79FB\u52D5 ${count("move")}\u30FB\u524A\u9664 ${count("delete")}\uFF09\u3002`;
+function appliedText(counts) {
+  return `\u53CD\u6620\u3057\u307E\u3057\u305F\uFF08\u4F5C\u6210 ${counts.create}\u30FB\u66F4\u65B0 ${counts.update}\u30FB\u540D\u524D\u306E\u5909\u66F4 ${counts.rename}\u30FB\u79FB\u52D5 ${counts.move}\u30FB\u524A\u9664 ${counts.delete}\uFF09\u3002`;
 }
 
 // src/cli/version.ts
-var CLI_VERSION = true ? "1.0.0" : "0.0.0-dev";
+var CLI_VERSION = true ? "1.0.1" : "0.0.0-dev";
 
 // src/infrastructure/ci-env.ts
 var REPOSITORY_PATTERN2 = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
@@ -21173,16 +21172,29 @@ function decideConfirmedDeletes(params) {
 }
 
 // src/domain/readiness.ts
+var NOT_FOUND = "\u6587\u66F8\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\uFF08\u53CD\u6620\u306E\u9014\u4E2D\u3067\u6D88\u3055\u308C\u307E\u3057\u305F\uFF09\u3002";
+var failedText = (doc) => `\u53D6\u308A\u8FBC\u307F\u306B\u5931\u6557\u3057\u307E\u3057\u305F\uFF1A${doc.head_revision?.error_message ?? "\u7406\u7531\u306F\u8A18\u9332\u3055\u308C\u3066\u3044\u307E\u305B\u3093"}`;
 function evaluateReadiness(input2) {
   const byId = new Map(input2.documents.map((doc) => [doc.id, doc]));
+  const byExternalId = new Map(
+    input2.documents.flatMap(
+      (doc) => doc.external_id === null ? [] : [[doc.external_id, doc]]
+    )
+  );
   const readiness = { live: [], pending: [], failed: [] };
   for (const { externalId, documentId, revisionId } of input2.expected) {
-    const doc = byId.get(documentId);
+    const doc = documentId === null ? byExternalId.get(externalId) : byId.get(documentId);
     if (doc === void 0) {
-      readiness.failed.push({
-        externalId,
-        message: "\u6587\u66F8\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\uFF08\u53CD\u6620\u306E\u9014\u4E2D\u3067\u6D88\u3055\u308C\u307E\u3057\u305F\uFF09\u3002"
-      });
+      readiness.failed.push({ externalId, message: NOT_FOUND });
+    } else if (revisionId === null) {
+      const head = doc.head_revision;
+      if (head?.state === "failed") {
+        readiness.failed.push({ externalId, message: failedText(doc) });
+      } else if (head !== null && doc.current_revision?.id === head.id) {
+        readiness.live.push(externalId);
+      } else {
+        readiness.pending.push(externalId);
+      }
     } else if (doc.current_revision?.id === revisionId) {
       readiness.live.push(externalId);
     } else if (doc.head_revision?.id !== revisionId) {
@@ -21191,10 +21203,7 @@ function evaluateReadiness(input2) {
         message: "\u53CD\u6620\u306E\u9014\u4E2D\u3067\u3001\u5225\u306E\u7248\u306B\u7F6E\u304D\u63DB\u308F\u308A\u307E\u3057\u305F\u3002"
       });
     } else if (doc.head_revision.state === "failed") {
-      readiness.failed.push({
-        externalId,
-        message: `\u53D6\u308A\u8FBC\u307F\u306B\u5931\u6557\u3057\u307E\u3057\u305F\uFF1A${doc.head_revision.error_message ?? "\u7406\u7531\u306F\u8A18\u9332\u3055\u308C\u3066\u3044\u307E\u305B\u3093"}`
-      });
+      readiness.failed.push({ externalId, message: failedText(doc) });
     } else {
       readiness.pending.push(externalId);
     }
@@ -21574,6 +21583,46 @@ var viewOf = (sourceId, prepared, response, needsConfirmation) => ({
 });
 
 // src/use-cases/apply-sync.ts
+var countsOf = (plan) => ({
+  create: plan.create.length,
+  update: plan.update.length,
+  rename: plan.rename.length,
+  move: plan.move.length,
+  delete: plan.delete.length
+});
+function expectedOf(plan, executed) {
+  const known = new Map(
+    executed.flatMap(
+      (item) => (item.kind === "create" || item.kind === "update" || item.kind === "rename") && item.revision_id !== null ? [
+        [
+          item.external_id,
+          {
+            externalId: item.external_id,
+            documentId: item.document_id,
+            revisionId: item.revision_id
+          }
+        ]
+      ] : []
+    )
+  );
+  const planned = [
+    ...plan.create.map((op) => ({
+      externalId: op.external_id,
+      documentId: null,
+      revisionId: null
+    })),
+    ...[...plan.update, ...plan.rename].map((op) => ({
+      externalId: op.external_id,
+      documentId: op.document_id,
+      revisionId: null
+    }))
+  ];
+  const plannedIds = new Set(planned.map((item) => item.externalId));
+  return [
+    ...planned.map((item) => known.get(item.externalId) ?? item),
+    ...[...known.values()].filter((item) => !plannedIds.has(item.externalId))
+  ];
+}
 var UPLOAD_CONCURRENCY = 4;
 var POLL_INTERVAL_MS = 15e3;
 var MAX_STALLED_ROUNDS = 2;
@@ -21677,8 +21726,15 @@ async function applySync(deps, params) {
   if (!planned.ok) return planned;
   const { response, confirmed } = planned.value;
   const view = viewOf(params.sourceId, prepared.value, response, []);
+  const counts = countsOf(response.plan);
   if (!hasChanges(response.plan)) {
-    return ok({ outcome: "unchanged", view, executed: [], readiness: null });
+    return ok({
+      outcome: "unchanged",
+      view,
+      executed: [],
+      counts,
+      readiness: null
+    });
   }
   if (!await deps.confirm(view)) return err({ kind: "declined" });
   const uploaded = await uploadAll(
@@ -21727,20 +21783,18 @@ async function applySync(deps, params) {
     previous = remaining;
   }
   if (!params.wait) {
-    return ok({ outcome: "applied", view, executed, readiness: null });
+    return ok({ outcome: "applied", view, executed, counts, readiness: null });
   }
-  const expected = executed.flatMap(
-    (item) => (item.kind === "create" || item.kind === "update" || item.kind === "rename") && item.revision_id !== null ? [
-      {
-        externalId: item.external_id,
-        documentId: item.document_id,
-        revisionId: item.revision_id
-      }
-    ] : []
-  );
+  const expected = expectedOf(response.plan, executed);
   const readiness = expected.length === 0 ? ok({ live: [], pending: [], failed: [] }) : await waitUntilLive(deps, expected, params.waitTimeoutMs);
   if (!readiness.ok) return readiness;
-  return ok({ outcome: "applied", view, executed, readiness: readiness.value });
+  return ok({
+    outcome: "applied",
+    view,
+    executed,
+    counts,
+    readiness: readiness.value
+  });
 }
 
 // src/use-cases/plan-sync.ts
@@ -22057,9 +22111,9 @@ async function runApply(session, run) {
     }
   );
   if (!result.ok) return fail(session, "apply", run.sourceId, result.error);
-  const { view, executed, outcome } = result.value;
+  const { view, executed, counts, outcome } = result.value;
   annotate(session, view.findings);
-  const done = outcome === "applied" ? appliedText(executed) : ACTION_MESSAGES.unchanged;
+  const done = outcome === "applied" ? appliedText(counts) : ACTION_MESSAGES.unchanged;
   await writeSummary(
     session,
     (options) => `${renderPlanMarkdown(view, options)}

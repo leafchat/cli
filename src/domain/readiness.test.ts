@@ -94,3 +94,90 @@ test.each([
     expect(result).toEqual(readiness);
   },
 );
+
+/** 実行の応答を取りこぼした作成（文書と版の ID が分からない）。 */
+const EXPECTED_BY_PATH = {
+  externalId: "共通/料金表.md",
+  documentId: null,
+  revisionId: null,
+};
+
+test.each([
+  {
+    状況: "最新の版が公開中",
+    documents: [
+      apiDocument({
+        id: "doc-9",
+        external_id: "共通/料金表.md",
+        current_revision: { id: "rev-9", state: "live", error_message: null },
+        head_revision: { id: "rev-9", state: "live", error_message: null },
+      }),
+    ],
+    readiness: { live: ["共通/料金表.md"], pending: [], failed: [] },
+  },
+  {
+    状況: "最新の版が処理中",
+    documents: [
+      apiDocument({
+        id: "doc-9",
+        external_id: "共通/料金表.md",
+        current_revision: null,
+        head_revision: {
+          id: "rev-9",
+          state: "processing",
+          error_message: null,
+        },
+      }),
+    ],
+    readiness: { live: [], pending: ["共通/料金表.md"], failed: [] },
+  },
+  {
+    状況: "最新の版の取り込みが失敗",
+    documents: [
+      apiDocument({
+        id: "doc-9",
+        external_id: "共通/料金表.md",
+        current_revision: null,
+        head_revision: {
+          id: "rev-9",
+          state: "failed",
+          error_message: "本文を読めません",
+        },
+      }),
+    ],
+    readiness: {
+      live: [],
+      pending: [],
+      failed: [
+        {
+          externalId: "共通/料金表.md",
+          message: "取り込みに失敗しました：本文を読めません",
+        },
+      ],
+    },
+  },
+  {
+    状況: "外部 ID の文書が無い",
+    documents: [apiDocument()],
+    readiness: {
+      live: [],
+      pending: [],
+      failed: [
+        {
+          externalId: "共通/料金表.md",
+          message: "文書が見つかりません（反映の途中で消されました）。",
+        },
+      ],
+    },
+  },
+])(
+  "版の分からない操作は外部 ID で文書を探し、「$状況」なら表のとおりに判定する",
+  ({ documents, readiness }) => {
+    const result = evaluateReadiness({
+      expected: [EXPECTED_BY_PATH],
+      documents,
+    });
+
+    expect(result).toEqual(readiness);
+  },
+);
