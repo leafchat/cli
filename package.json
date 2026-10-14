@@ -57,16 +57,16 @@
   },
   "devDependencies": {
     "@actions/core": "3.0.1",
-    "@biomejs/biome": "2.5.14",
+    "@biomejs/biome": "2.5.15",
     "@commander-js/extra-typings": "15.0.0",
-    "@types/node": "^24",
+    "@types/node": "^26",
     "commander": "15.0.0",
-    "dependency-cruiser": "^17.3.10",
+    "dependency-cruiser": "^18.5.0",
     "esbuild": "0.28.2",
     "knip": "^6.0.5",
     "publint": "0.3.25",
-    "typescript": "~6.0.3",
-    "vitest": "4.1.11",
+    "typescript": "~7.0.2",
+    "vitest": "5.0.3",
     "zod": "4.6.5"
   }
 }
